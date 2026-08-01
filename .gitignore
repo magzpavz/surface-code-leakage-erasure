@@ -1,0 +1,16 @@
+__pycache__
+*.pyc
+.DS_Store
+.vscode
+*egg-info
+
+# virtual environments
+venv*/
+.venv/
+
+# build artifacts
+build/
+dist/
+
+# test artifacts
+.pytest_cache/

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "surface-code-leakage-erasure"
+version = "0.1.0"
+description = "Surface code leakage erasure package"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "stim",
+    "sinter",
+    "joblib",
+    # NOT upstream PyMatching. The branch-and-bound decoder calls
+    # Matching.decode_to_edges_array(..., edge_reweights=...); upstream (2.4.0)
+    # accepts edge_reweights on decode() but not on decode_to_edges_array(),
+    # so ErasureDecoder.decode(branch_and_bound=True) raises TypeError there.
+    # This fork also carries fixes to the edge-reweighting path itself.
+    # Both forks report version 2.4.0, so a version specifier cannot select it;
+    # the direct URL is required.
+    "pymatching @ git+https://github.com/Allenator/PyMatching.git",
+]
+
+[project.optional-dependencies]
+# analysis.py and plotting.py only; the core simulation does not need these
+analysis = [
+    "pandas",
+    "scipy",
+    "matplotlib",
+]
+
+[tool.setuptools]
+packages = ["surface_code_leakage_erasure"]
+
+[tool.setuptools.package-dir]
+"" = "src"

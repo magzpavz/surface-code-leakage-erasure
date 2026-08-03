@@ -13,8 +13,7 @@ leakage locations.
 
 This is the code accompanying **"Erasure surface code circuit without
 mid-circuit erasure checks"**, by Margaret Pavlovich, Ivan Rojkov, Chen Wang,
-and Shruti Puri — arXiv:2608.XXXXX <TODO: arXiv URL>. 
-<!-- See [Citation](#citation) below. -->
+and Shruti Puri — [arXiv:2607.29443](https://arxiv.org/abs/2607.29443). 
 
 ## Requirements
 
@@ -228,4 +227,17 @@ result individual runs cannot be reproduced exactly, only statistically.
 
 If you use this code, please cite:
 
-TBA
+M. Pavlovich, I. Rojkov, C. Wang, and S. Puri, *Erasure Surface Code Circuit without Mid-Circuit Erasure Checks*, arXiv:2607.29443.
+
+```
+@misc{pavlovichErasureSurfaceCode2026,
+  title = {Erasure Surface Code Circuit without Mid-Circuit Erasure Checks},
+  author = {Pavlovich, Margaret and Rojkov, Ivan and Wang, Chen and Puri, Shruti},
+  year = 2026,
+  eprint = {2607.29443},
+  archiveprefix = {arXiv},
+  primaryClass={quant-ph},
+  url = {https://arxiv.org/abs/2607.29443},
+  doi = {10.48550/arXiv.2607.29443}
+}
+```

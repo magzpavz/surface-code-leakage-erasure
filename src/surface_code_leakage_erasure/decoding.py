@@ -639,14 +639,8 @@ class ErasureDecoder:
 
         # remove decoded_edges explained by chosen_leak_locs
         rounds = len(erasure_checks)
-        # KNOWN ISSUE (see "Known issues" in the README): the missing unpacking
-        # star makes this a set of frozensets rather than the union of the edges,
-        # so the subtraction below removes nothing. The corrected line is:
-        # leak_edges = set().union(
-        #     *(self.get_single_leakloc_edge_set(rounds, *loc, **circuit_kwargs) for loc in chosen_leak_locs))
-        # Left uncorrected for now so this code matches the runs in the paper.
         leak_edges = set().union(
-            self.get_single_leakloc_edge_set(rounds, *loc, **circuit_kwargs) for loc in chosen_leak_locs)
+            *(self.get_single_leakloc_edge_set(rounds, *loc, **circuit_kwargs) for loc in chosen_leak_locs))
         decoded_edges = decoded_edges - leak_edges
 
         # construct DEMs and coverage dict from erasure checks
@@ -823,7 +817,7 @@ class ErasureDecoder:
             # if leak_effect does not have skipped gates, then we don't have disjointness constraints and no need to do special decoding
             return (decoded_result, decoded_result)
         # if circuit_kwargs.get("ec_sched", 8) == 1:
-        #     # erasure check every round, no disjointness
+        #     # erasure check every CNOT, no disjointness
         #     return (decoded_result, decoded_result)
         ## do branch-and-bound decoding
 

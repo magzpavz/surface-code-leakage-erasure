@@ -489,7 +489,6 @@ def plot_sweep_LER_data_and_fits(
         p_values=p_values, d_values=d_values,
         restrict_to=dat_restricted,
         ler_name=ler_name,
-        fig=fig,
-        **( {'ls': '-', 'lw': 0.8} | fit_plot_kwargs))
+        **( {'ls': '-', 'lw': 0.8, 'fig': fig, 'axs': axs} | fit_plot_kwargs))
 
     return fig, axs

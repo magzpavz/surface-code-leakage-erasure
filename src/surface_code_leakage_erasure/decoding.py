@@ -639,14 +639,8 @@ class ErasureDecoder:
 
         # remove decoded_edges explained by chosen_leak_locs
         rounds = len(erasure_checks)
-        # KNOWN ISSUE (see "Known issues" in the README): the missing unpacking
-        # star makes this a set of frozensets rather than the union of the edges,
-        # so the subtraction below removes nothing. The corrected line is:
-        # leak_edges = set().union(
-        #     *(self.get_single_leakloc_edge_set(rounds, *loc, **circuit_kwargs) for loc in chosen_leak_locs))
-        # Left uncorrected for now so this code matches the runs in the paper.
         leak_edges = set().union(
-            self.get_single_leakloc_edge_set(rounds, *loc, **circuit_kwargs) for loc in chosen_leak_locs)
+            *(self.get_single_leakloc_edge_set(rounds, *loc, **circuit_kwargs) for loc in chosen_leak_locs))
         decoded_edges = decoded_edges - leak_edges
 
         # construct DEMs and coverage dict from erasure checks
@@ -661,54 +655,49 @@ class ErasureDecoder:
 
         # Order dem lists by most-constrained first (fewest useful edges), dropping DEM lists with no useful edges
         useful_idxs = np.argsort(options_per_row)[options_per_row.count(0):]
-        dem_lists_sorted = [dem_table[idx] for idx in useful_idxs]
-        dem_union_list = [set().union(*dem_list) for dem_list in dem_lists_sorted]
+        dem_table_sorted = [dem_table[idx] for idx in useful_idxs]
 
         # Backtrack
-        return self.backtrack(dem_lists_sorted, uncovered=decoded_edges, dem_unions=dem_union_list)
+        return self.backtrack(dem_table_sorted, uncovered=decoded_edges)
 
     # @profile
-    def backtrack(self, remaining_dems, uncovered, dem_unions):
+    def backtrack(self, dem_table_sorted, uncovered, start_idx=0):
         """Backtrack to find a valid combination of DEMs that can explain the decoded edges. Subroutine for check_solution_validity
 
         Arguments:
-        remaining_dems: the remaining DEM lists of the dem_table to consider, ordered by most-constrained first
+        dem_table_sorted: the DEM, ordered by most-constrained first
         uncovered: the edges that still need to be explained
-        dem_unions: precomputed unions of DEMs in each row, used for forward checking to prune branches early
+        start_idx: index of the first DEM list in dem_table_sorted still to be considered. Recursion advances this index
 
         """
         # print("entered `backtrack`")
         if not uncovered:  # no unaccounted for edges left -> found a valid combination of DEMs that can explain the decoded edges
             return (True, set())
-        if not remaining_dems:   # no more DEMs to choose from, but still have uncovered edges -> this combination of DEMs can't explain the decoded edges
+        if start_idx >= len(dem_table_sorted):   # no more DEMs to choose from, but still have uncovered edges -> this combination of DEMs can't explain the decoded edges
             # print("no remaining dems!")
             return (False, uncovered)
 
-        # Forward check: any edge in none of the remaining DEMs?
-        # Can probably get rid of this since solution is valid >99% of the time, so maybe not necessary to do early pruning
-        # for e in uncovered:
-        #     if not any(e in dem_union for dem_union in dem_unions):
-        #         return (False, {e})   # prune immediately
-
-        cur_dem_list = remaining_dems[0]
-        leftover_dems = remaining_dems[1:]
-        leftover_unions = dem_unions[1:]
+        cur_dem_list = dem_table_sorted[start_idx]
+        next_idx = start_idx + 1
 
         # Prioritize DEMs that explain the most uncovered elements (greedy heuristic)
         coverage_per_dem = [len(uncovered & dem) for dem in cur_dem_list]
-        # sort DEMs by most coverage of uncovered edges, and filter out DEMs that don't cover any uncovered edges
-        candidate_dems = [cur_dem_list[i] for i in np.argsort(coverage_per_dem)[::-1] if coverage_per_dem[i] > 0]
+        # sort DEMs by most coverage of uncovered edges, and filter out DEMs that don't cover any uncovered edges.
+        # cur_dem_list has one entry per leakage location for an erasure check, so this sorts a handful of elements---sorted is better than np.argsort
+        order = sorted(range(len(cur_dem_list)),
+                       key=lambda i: (coverage_per_dem[i], i), reverse=True)
+        candidate_dems = [cur_dem_list[i] for i in order if coverage_per_dem[i] > 0]
 
         conflict_witness = uncovered  # to keep track of which edge(s) caused the problem
 
         if not candidate_dems:
             # print("no useful dems in this row!")
-            return self.backtrack(leftover_dems, uncovered, leftover_unions)
+            return self.backtrack(dem_table_sorted, uncovered, next_idx)
 
         for (dem_idx, edge_set) in enumerate(candidate_dems):
             # print(f"check candidate DEM {dem_idx} with edges {edge_set}")
             new_uncovered = uncovered - edge_set
-            (valid, witness) = self.backtrack(leftover_dems, new_uncovered, leftover_unions)
+            (valid, witness) = self.backtrack(dem_table_sorted, new_uncovered, next_idx)
             if valid:
                 return (valid, witness)  # should be (True, set()) in this case
             if len(witness) < len(conflict_witness):
@@ -823,7 +812,7 @@ class ErasureDecoder:
             # if leak_effect does not have skipped gates, then we don't have disjointness constraints and no need to do special decoding
             return (decoded_result, decoded_result)
         # if circuit_kwargs.get("ec_sched", 8) == 1:
-        #     # erasure check every round, no disjointness
+        #     # erasure check every CNOT, no disjointness
         #     return (decoded_result, decoded_result)
         ## do branch-and-bound decoding
 

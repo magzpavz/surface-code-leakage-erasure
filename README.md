@@ -197,23 +197,6 @@ These are substituted automatically when detector error models are built — pas
 
 ## Known issues
 
-**Leakage-explained edges are not filtered in the branch-and-bound decoder.**
-While preparing this code for public release I noticed a bug in
-[`decoding.py`](src/surface_code_leakage_erasure/decoding.py): the set of edges
-already explained by the leakage locations fixed at a branch-and-bound node is
-built with `set().union(generator)` instead of `set().union(*(...))`. The
-missing unpacking star makes the result a set of frozensets rather than the
-union of the edges, so the subsequent subtraction removes nothing and those
-edges are still passed to the consistency check.
-
-The effect is that valid solutions can be reported as invalid, but never the
-reverse — the search over-branches and may miss an MLE solution, but it never
-accepts an inconsistent one. I therefore do not expect this to change the
-headline results. I intend to fix it and update the paper with new simulations;
-for now I am leaving the code as it was run for v1 of the paper. This bug only
-affects the branch-and-bound (`use_branch_and_bound=True`) path; marginal
-decoding is unaffected.
-
 **Sampling is not seedable end-to-end.** `SurfaceCodeErasureSampler` exposes no
 seed: each joblib worker builds its own `SurfaceCodeCircuitBuilder(layout)` with
 `seed=None`, and one leakage-sampling site in

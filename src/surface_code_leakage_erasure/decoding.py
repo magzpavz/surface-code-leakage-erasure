@@ -669,6 +669,10 @@ class ErasureDecoder:
         uncovered: the edges that still need to be explained
         start_idx: index of the first DEM list in dem_table_sorted still to be considered. Recursion advances this index
 
+        On failure, the returned witness is a subset of ``uncovered`` which
+        cannot be covered by any valid choice from this row and the rows below
+        it. This invariant is what makes witness-based sibling pruning sound.
+
         """
         # print("entered `backtrack`")
         if not uncovered:  # no unaccounted for edges left -> found a valid combination of DEMs that can explain the decoded edges
@@ -688,7 +692,11 @@ class ErasureDecoder:
                        key=lambda i: (coverage_per_dem[i], i), reverse=True)
         candidate_dems = [cur_dem_list[i] for i in order if coverage_per_dem[i] > 0]
 
-        conflict_witness = uncovered  # to keep track of which edge(s) caused the problem
+        # Keep a small suffix-scoped witness for pruning siblings in this row,
+        # while separately lifting all failed-child witnesses into a witness
+        # that is sound to return to this frame's caller.
+        conflict_witness = uncovered
+        lifted_witness = set()
 
         if not candidate_dems:
             # print("no useful dems in this row!")
@@ -700,14 +708,16 @@ class ErasureDecoder:
             (valid, witness) = self.backtrack(dem_table_sorted, new_uncovered, next_idx)
             if valid:
                 return (valid, witness)  # should be (True, set()) in this case
+            lifted_witness.update(witness)
             if len(witness) < len(conflict_witness):
                 # new smallest conflict witness found, update
                 conflict_witness = witness
             if len(conflict_witness & set().union(*candidate_dems[(dem_idx+1):])) == 0:
-                # if no remaining candidate DEM can explain any of the edges in the conflict witness, then no need to continue checking the remaining candidate DEMs for this row (because they have even less coverage than the current one), can prune immediately
+                # The suffix cannot cover conflict_witness. If no remaining
+                # sibling covers any of it either, those siblings must fail too.
                 break
 
-        return (False, conflict_witness)
+        return (False, lifted_witness)
 
     def find_disjoint_edges(self, uncovered_edges, covered_edges, dem_table, coverage):
         """ Given conflict witness of uncovered edges, find the edges which are included in the solution but can't be mutually explained given the disjointness constraints. """

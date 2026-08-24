@@ -111,8 +111,10 @@ def dem_to_dict_graphlike(dem : stim.DetectorErrorModel, return_edge_logicals=Fa
                 elif targ.is_logical_observable_id():
                     logicals.append(targ.val)
                 elif targ.is_separator():
+                    edge_tuple = edge_to_tuple(edge)
                     add_hyperedge_prob_inplace(
-                        dem_dict, (edge_to_tuple(edge),), line.args_copy()[0])
+                        dem_dict, (edge_tuple,), line.args_copy()[0])
+                    edge_logicals[edge_tuple] = frozenset(logicals)
                     edge = []
                     logicals = []
             if edge:
@@ -238,13 +240,22 @@ class DetectorErrorModelDict(Mapping):
     def __len__(self):
         return len(self._data)
 
-    def to_str(self) -> str:
-        """ Convert my format back to a string that can be parsed by stim. """
+    def to_str(self, edge_logicals=None) -> str:
+        """ Convert my format back to a string that can be parsed by stim.
+
+        Arguments:
+        edge_logicals: optional dict mapping edge tuple -> iterable of logical observable ids flipped by that edge, as returned by dem_to_dict_graphlike(..., return_edge_logicals=True). Graphlike DEMs keep the logicals out of their keys, so pass this to write them back into the string. Not needed for non-graphlike DEMs, whose keys already contain the logicals. Edges missing from the dict are written with no observables.
+        """
         tok = self._det_token
         prob_str = self._prob_str
+        if edge_logicals is None:
+            edge_logicals = {}
         return "\n".join([
             f"error({prob_str(prob)}) " + " ^ ".join(
-                [" ".join([tok(d) for d in edge]) for edge in hyperedge]
+                [" ".join(
+                    [tok(d) for d in edge]
+                    + [f"L{obs}" for obs in sorted(edge_logicals.get(edge, ()))]
+                ) for edge in hyperedge]
             )
             for hyperedge, prob in self.items()
         ])
@@ -358,6 +369,7 @@ class ErasureDecoder:
     def get_Pauli_matcher_graphdict_edgedict(self, rounds, p, lower_p_bound=1e-9, **circuit_kwargs):
         """ Get the pymatching.Matching object for just the Pauli errors. This matcher is as the baseline for reweighting. """
         p = max(p, lower_p_bound)  # need to have any errors for reweighting to work
+        # TODO: make sure Pauli baseline includes all necessary edges for reweighting, but without messing up the case where we actually had Pauli errors in the first place
         circuit, _ = self.circuit_builder.get_circuit(
             rounds, p, **circuit_kwargs
         )
@@ -368,6 +380,25 @@ class ErasureDecoder:
         graphdict, edgedict = dem_to_dict_graphlike(dem, return_edge_logicals=True)
 
         return matcher, graphdict, edgedict
+
+    def get_edge_logicals(self, rounds, p=1e-3, **circuit_kwargs) -> dict:
+        """ Get the mapping from edge (tuple of detectors) to the frozenset of logical observables that edge flips.
+
+        Graphlike DEMs keep the logicals out of their keys, so the DEMs built for leakage/erasure don't carry them. Which observables an edge flips is a property of the edge rather than of the error that produced it, so we can recover the mapping from a Pauli DEM with errors at every circuit location, which contains every edge of the decoding graph.
+
+        Arguments:
+        rounds: number of rounds in the circuit
+        p: Pauli error rate for the circuit used to build the mapping. Arbitrary, since only the edges are used and not their probabilities; it just needs to be nonzero
+        circuit_kwargs: kwargs used in circuit construction. Pauli_locations is overridden to "all"
+        """
+        circuit, _ = self.circuit_builder.get_circuit(
+            rounds, p, **{**circuit_kwargs, "Pauli_locations": "all"})
+        dem = circuit.detector_error_model(
+            decompose_errors=True, approximate_disjoint_errors=True)
+
+        _, edge_logicals = dem_to_dict_graphlike(dem, return_edge_logicals=True)
+
+        return edge_logicals
 
     ## erasure DEMs
     def check_can_use_increment(self, rounds, event_rnd, event_type="leak", **circuit_kwargs):
@@ -507,6 +538,7 @@ class ErasureDecoder:
     def get_full_average_dem_str(self, erasure_checks, **circuit_kwargs) -> str:
         """ Get the average DEM for all erasure checks. Combines DEMs for different leakage locations that but same erasure check as disjoint. Concatenates DEMs for different erasure checks to let them be parsed and combined independently by stim/pymatching. """
         rounds = len(erasure_checks)
+        edge_logicals = self.get_edge_logicals(rounds, **circuit_kwargs)
         dem_str_list = []
         for ec_rnd, ec_gate, ec_qubit in iterate_erasure_checks(erasure_checks):
             dem_str_list.append(self.get_single_ec_average_dem(
@@ -515,7 +547,7 @@ class ErasureDecoder:
                 ec_gate=ec_gate,
                 ec_qubit=ec_qubit,
                 **circuit_kwargs
-            ).to_str())
+            ).to_str(edge_logicals))
 
         return "\n".join(dem_str_list)
 
